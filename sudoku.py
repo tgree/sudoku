@@ -3,48 +3,132 @@ import itertools
 import math
 
 
-class DiffConstraint:
-    def __init__(self, v):
-        assert 1 <= v <= 8
-        self.perms = []
-        for i in range(1, 10 - v):
-            self.perms.append((i, i + v))
-            self.perms.append((i + v, i))
+def diff_perms(v):
+    assert 1 <= v <= 8
+    perms = set()
+    for i in range(1, 10 - v):
+        l, r = i, i + v
+        perms.add((l, r))
+        perms.add((r, l))
+    return list(np.array(p) for p in sorted(perms))
 
 
-class DivideConstraint:
-    def __init__(self, v):
-        assert 2 <= v <= 9
-        self.perms = []
-        for i in range(1, math.ceil(10 / v)):
-            l, r = i*v, i
-            self.perms.append((l, r))
-            if l != r:
-                self.perms.append((r, l))
+def div_perms(v):
+    assert 2 <= v <= 9
+    perms = set()
+    for i in range(1, math.ceil(10 / v)):
+        l, r = i*v, i
+        perms.add((l, r))
+        perms.add((r, l))
+    return list(np.array(p) for p in sorted(perms))
 
 
-class MultiplyConstraint:
-    def __init__(self, v, N):
-        perms = set()
-        for i in range(10**(N-1), 10**N):
-            digits = [(i // 10**j) % 10 for j in range(N)]
-            if np.prod(digits) == v:
-                for perm in itertools.permutations(digits):
-                    perms.add(perm)
-        self.perms = list(perms)
+def mul_perms(v, N):
+    perms = set()
+    for i in range(10**(N-1), 10**N):
+        digits = [(i // 10**j) % 10 for j in range(N)]
+        if np.prod(digits) == v:
+            for perm in itertools.permutations(digits):
+                perms.add(perm)
+    return list(np.array(p) for p in sorted(perms))
 
 
-class AddConstraint:
-    def __init__(self, v, N):
-        perms = set()
-        for i in range(10**(N-1), 10**N):
-            digits = [(i // 10**j) % 10 for j in range(N)]
-            if 0 in digits:
-                continue
-            if np.sum(digits) == v:
-                for perm in itertools.permutations(digits):
-                    perms.add(perm)
-        self.perms = list(perms)
+def sum_perms(v, N):
+    perms = set()
+    for i in range(10**(N-1), 10**N):
+        digits = [(i // 10**j) % 10 for j in range(N)]
+        if 0 in digits:
+            continue
+        if np.sum(digits) == v:
+            for perm in itertools.permutations(digits):
+                perms.add(perm)
+    perms = list(perms)
+
+
+class Constraint:
+    def __init__(self, indices, perms):
+        N = len(indices)
+        for p in perms:
+            assert len(p) == N
+
+        self.y, self.x = np.transpose(np.array(indices))
+        self.perms     = perms
+
+
+class Board:
+    def __init__(self, H=9, W=9):
+        self.slots         = np.zeros((H, W))
+        self.row_bitmap    = [0] * H
+        self.column_bitmap = [0] * W
+        self.constraints   = []
+
+    def __repr__(self):
+        return repr(self.slots)
+
+    def add_perm(self, p, indices):
+        for v, (r, c) in zip(p, indices):
+            assert not self.slots[r, c]
+
+            mask = (1 << v)
+            if self.row_bitmap[r] & mask:
+                return False
+            if self.column_bitmap[c] & mask:
+                return False
+
+        for v, (r, c) in zip(p, indices):
+            mask                   = (1 << v)
+            self.slots[r, c]       = v
+            self.row_bitmap[r]    |= mask
+            self.column_bitmap[c] |= mask
+
+        return True
+
+    def del_perm(self, indices):
+        for r, c in indices:
+            v = self.slots[r, c]
+            assert v != 0
+
+            mask                   = (1 << v)
+            self.slots[r, c]       = 0
+            self.row_bitmap[r]    &= ~mask
+            self.column_bitmap[c] &= ~mask
+
+    def add_constant(self, v, index):
+        return self.add_perm((v,), [index])
+
+    def add_constraint(self, indices, perms):
+        self.constraints.append(Constraint(indices, perms))
+
+    def add_sum_constraint(self, v, indices):
+        self.add_constraint(indices, sum_perms(v, len(indices)))
+
+    def add_mul_constraint(self, v, indices):
+        self.add_constraint(indices, mul_perms(v, len(indices)))
+
+    def add_diff_constraint(self, v, indices):
+        assert len(indices) == 2
+        self.add_constraint(indices, diff_perms(v))
+
+    def add_div_constraint(self, v, indices):
+        assert len(indices) == 2
+        self.add_constraint(indices, div_perms(v))
+
+    def _solve(self, ci):
+        if ci == len(self.constraints):
+            return True
+
+        c = self.constraints[ci]
+        for p in c.perms:
+            if self.add_perm(p, c.indices):
+                print(self)
+                if self._solve(ci + 1):
+                    return True
+                self.del_perm(c.indices)
+
+        return False
+
+    def solve(self):
+        return self._solve(0)
 
 
 def check_equals_ok(board, indice, v):
