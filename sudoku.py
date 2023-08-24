@@ -157,25 +157,35 @@ class Board:
     def add_set_constraint(self, digits, indices):
         self.add_constraint(indices, set_perms(digits))
 
+    def _filter(self):
+        for c in self.constraints:
+            perms = []
+            for p in c.perms:
+                if self.add_perm(p, c.indices):
+                    perms.append(p)
+                    self.del_perm(c.indices)
+            c.perms = perms
+
     def _solve(self, ci):
         if ci == len(self.constraints):
             return True
 
-        self.iter += 1
-
         c = self.constraints[ci]
         for p in c.perms:
+            self.iter += 1
             if self.add_perm(p, c.indices):
                 print(self)
-                # print(' '.join('0x%02X' % b for b in self.row_bitmap))
-                # print(' '.join('0x%02X' % b for b in self.column_bitmap))
                 if self._solve(ci + 1):
                     return True
                 self.del_perm(c.indices)
 
         return False
 
-    def solve(self):
+    def solve(self, no_filter=False):
+        if not no_filter:
+            print('Filtering...')
+            self._filter()
+        print('Solving...')
         return self._solve(0)
 
 
@@ -254,6 +264,7 @@ def hard_sudoku_1():
 
 
 def main(args):
+    print('Building...')
     if args.board == 0:
         b = epoch_sudoku_1()
     elif args.board == 1:
@@ -264,16 +275,18 @@ def main(args):
         print('Unknown board %s.' % args.board)
         return
 
-    if b.solve():
+    if b.solve(no_filter=args.no_filter):
         print('Found solution:')
         print(b)
     else:
         print('No solution.')
+    print('%u iterations.' % b.iter)
 
 
 def _main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--board', type=int)
+    parser.add_argument('--no-filter', action='store_true')
     args = parser.parse_args()
     main(args)
 
