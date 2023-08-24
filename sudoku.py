@@ -1,7 +1,9 @@
-import numpy as np
+import argparse
 import itertools
 import math
 import sys
+
+import numpy as np
 
 
 def diff_perms(v):
@@ -46,6 +48,10 @@ def sum_perms(v, N):
     return list(perms)
 
 
+def set_perms(digits):
+    return list(itertools.permutations(digits))
+
+
 class Constraint:
     def __init__(self, indices, perms):
         N = len(indices)
@@ -58,21 +64,52 @@ class Constraint:
 
 
 class Board:
-    def __init__(self, H=9, W=9):
-        self.slots         = np.zeros((H, W), dtype=np.int32)
+    def __init__(self, array):
+        H = len(array)
+        W = len(array[0])
+
+        self.slots         = np.array(array, dtype=np.int32)
+        self.init_slots    = np.copy(self.slots)
         self.row_bitmap    = [0] * H
         self.column_bitmap = [0] * W
         self.constraints   = []
         self.iter          = 0
 
+        for r in range(H):
+            for c in range(W):
+                v = self.slots[r, c]
+                if v:
+                    self.row_bitmap[r]    |= (1 << v)
+                    self.column_bitmap[c] |= (1 << v)
+
     def __repr__(self):
         return repr(self.slots)
+
+    @staticmethod
+    def from_sudoku(array):
+        b = Board(array)
+        for y in range(3):
+            for x in range(3):
+                digits  = set([1, 2, 3, 4, 5, 6, 7, 8, 9])
+                indices = []
+                for Y in range(y*3, y*3 + 3):
+                    for X in range(x*3, x*3 + 3):
+                        digits.discard(b.slots[Y, X])
+                        if b.slots[Y, X] == 0:
+                            indices.append((Y, X))
+                b.add_set_constraint(digits, indices)
+        return b
 
     def add_perm(self, p, indices):
         row_bitmap    = self.row_bitmap[:]
         column_bitmap = self.column_bitmap[:]
         for v, (r, c) in zip(p, indices):
-            assert not self.slots[r, c]
+            iv = self.init_slots[r, c]
+            if iv:
+                if v != iv:
+                    return False
+            else:
+                assert not self.slots[r, c]
 
             mask = (1 << v)
             if row_bitmap[r] & mask:
@@ -100,9 +137,6 @@ class Board:
             self.row_bitmap[r]    &= ~mask
             self.column_bitmap[c] &= ~mask
 
-    def add_constant(self, v, index):
-        assert self.add_perm((v,), [index])
-
     def add_constraint(self, indices, perms):
         self.constraints.append(Constraint(indices, perms))
 
@@ -119,6 +153,9 @@ class Board:
     def add_div_constraint(self, v, indices):
         assert len(indices) == 2
         self.add_constraint(indices, div_perms(v))
+
+    def add_set_constraint(self, digits, indices):
+        self.add_constraint(indices, set_perms(digits))
 
     def _solve(self, ci):
         if ci == len(self.constraints):
@@ -142,11 +179,17 @@ class Board:
         return self._solve(0)
 
 
-if __name__ == '__main__':
-    b = Board(9, 9)
-    b.add_constant(1, (0, 0))
-    b.add_constant(4, (5, 4))
-    b.add_constant(6, (6, 8))
+def epoch_sudoku_1():
+    b = Board([[1, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 4, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 6],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               [0, 0, 0, 0, 0, 0, 0, 0, 0],
+               ])
     b.add_mul_constraint(40,  [(0, 1), (0, 2)])
     b.add_mul_constraint(360, [(0, 3), (0, 4), (1, 4), (2, 4)])
     b.add_sum_constraint(20,  [(0, 5), (0, 6), (1, 5), (1, 6)])
@@ -175,8 +218,65 @@ if __name__ == '__main__':
     b.add_sum_constraint(13,  [(8, 2), (8, 3)])
     b.add_div_constraint(2,   [(8, 5), (8, 6)])
     b.add_dif_constraint(4,   [(8, 7), (8, 8)])
+    return b
+
+
+def easy_sudoku_1():
+    b = Board.from_sudoku([[8, 0, 6,   0, 2, 7,   0, 0, 0],
+                           [0, 9, 3,   0, 6, 0,   2, 0, 0],
+                           [1, 4, 2,   0, 0, 0,   0, 8, 7],
+
+                           [0, 0, 1,   6, 0, 9,   0, 0, 0],
+                           [6, 8, 0,   0, 0, 2,   0, 1, 0],
+                           [0, 2, 0,   0, 0, 1,   3, 4, 0],
+
+                           [0, 0, 0,   0, 7, 3,   0, 0, 0],
+                           [4, 3, 0,   2, 9, 0,   5, 0, 0],
+                           [0, 6, 0,   0, 0, 0,   0, 0, 2],
+                           ])
+    return b
+
+
+def hard_sudoku_1():
+    b = Board.from_sudoku([[0, 0, 9,   0, 0, 0,   7, 0, 3],
+                           [0, 3, 0,   0, 8, 0,   0, 0, 0],
+                           [5, 0, 4,   0, 0, 0,   9, 0, 0],
+
+                           [0, 6, 0,   0, 0, 0,   0, 0, 0],
+                           [1, 0, 0,   2, 3, 0,   0, 0, 0],
+                           [7, 0, 0,   0, 0, 9,   0, 1, 0],
+
+                           [0, 0, 0,   0, 0, 4,   2, 3, 6],
+                           [0, 0, 1,   0, 0, 5,   4, 9, 0],
+                           [0, 0, 7,   0, 0, 0,   0, 0, 0],
+                           ])
+    return b
+
+
+def main(args):
+    if args.board == 0:
+        b = epoch_sudoku_1()
+    elif args.board == 1:
+        b = easy_sudoku_1()
+    elif args.board == 2:
+        b = hard_sudoku_1()
+    else:
+        print('Unknown board %s.' % args.board)
+        return
+
     if b.solve():
         print('Found solution:')
         print(b)
     else:
         print('No solution.')
+
+
+def _main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--board', type=int)
+    args = parser.parse_args()
+    main(args)
+
+
+if __name__ == '__main__':
+    _main()
