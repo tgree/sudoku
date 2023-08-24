@@ -100,6 +100,46 @@ class Board:
                 b.add_set_constraint(digits, indices)
         return b
 
+    @staticmethod
+    def from_epoch_doku(lines):
+        lines = [l.strip() for l in lines]
+        for l in lines:
+            l.replace(' ','')
+
+        D = len(lines[0])
+        assert lines[D] == ''
+        array = np.zeros((D, D))
+        idict = {}
+        for r, l in enumerate(lines[:D]):
+            for c, k in enumerate(l):
+                if k in '123456789':
+                    array[r, c] = int(k)
+                else:
+                    if k not in idict:
+                        idict[k] = []
+                    idict[k].append((r, c))
+
+        b = Board(array)
+        for l in lines[D+1:]:
+            k  = l[0]
+            op = l[1]
+            v  = int(l[2:])
+            if op == '+':
+                b.add_sum_constraint(v, idict[k])
+            elif op == '-':
+                b.add_dif_constraint(v, idict[k])
+            elif op == '*':
+                b.add_mul_constraint(v, idict[k])
+            elif op == '/':
+                b.add_div_constraint(v, idict[k])
+            else:
+                raise Exception('Unrecognized op: "%s"' % k)
+            del idict[k]
+        if idict:
+            raise Exception('Missing constraints: %s' % idict.keys())
+
+        return b
+
     def add_perm(self, p, indices):
         row_bitmap    = self.row_bitmap[:]
         column_bitmap = self.column_bitmap[:]
@@ -189,48 +229,6 @@ class Board:
         return self._solve(0)
 
 
-def epoch_sudoku_1():
-    b = Board([[1, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 4, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 6],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               [0, 0, 0, 0, 0, 0, 0, 0, 0],
-               ])
-    b.add_mul_constraint(40,  [(0, 1), (0, 2)])
-    b.add_mul_constraint(360, [(0, 3), (0, 4), (1, 4), (2, 4)])
-    b.add_sum_constraint(20,  [(0, 5), (0, 6), (1, 5), (1, 6)])
-    b.add_sum_constraint(18,  [(0, 7), (0, 8), (1, 7), (1, 8)])
-    b.add_dif_constraint(3,   [(1, 0), (1, 1)])
-    b.add_dif_constraint(6,   [(1, 2), (2, 2)])
-    b.add_div_constraint(4,   [(1, 3), (2, 3)])
-    b.add_dif_constraint(3,   [(2, 0), (2, 1)])
-    b.add_sum_constraint(15,  [(2, 5), (3, 3), (3, 4), (3, 5)])
-    b.add_div_constraint(2,   [(2, 6), (2, 7)])
-    b.add_sum_constraint(20,  [(2, 8), (3, 8), (4, 8), (5, 8)])
-    b.add_sum_constraint(10,  [(3, 0), (3, 1), (4, 0)])
-    b.add_mul_constraint(30,  [(3, 2), (4, 2), (5, 2), (5, 3)])
-    b.add_sum_constraint(20,  [(3, 6), (3, 7), (4, 7)])
-    b.add_mul_constraint(784, [(4, 1), (5, 1), (6, 1), (6, 2), (7, 1)])
-    b.add_dif_constraint(2,   [(4, 3), (4, 4)])
-    b.add_sum_constraint(16,  [(4, 5), (5, 5)])
-    b.add_mul_constraint(90,  [(4, 6), (5, 6), (5, 7)])
-    b.add_sum_constraint(16,  [(5, 0), (6, 0), (7, 0)])
-    b.add_sum_constraint(18,  [(6, 3), (7, 2), (7, 3)])
-    b.add_mul_constraint(18,  [(6, 4), (7, 4), (8, 4)])
-    b.add_sum_constraint(13,  [(6, 5), (7, 5)])
-    b.add_mul_constraint(36,  [(6, 6), (7, 6)])
-    b.add_mul_constraint(9,   [(6, 7), (7, 7), (7, 8)])
-    b.add_dif_constraint(4,   [(8, 0), (8, 1)])
-    b.add_sum_constraint(13,  [(8, 2), (8, 3)])
-    b.add_div_constraint(2,   [(8, 5), (8, 6)])
-    b.add_dif_constraint(4,   [(8, 7), (8, 8)])
-    return b
-
-
 def easy_sudoku_1():
     b = Board.from_sudoku([[8, 0, 6,   0, 2, 7,   0, 0, 0],
                            [0, 9, 3,   0, 6, 0,   2, 0, 0],
@@ -265,8 +263,13 @@ def hard_sudoku_1():
 
 def main(args):
     print('Building...')
-    if args.board == 0:
-        b = epoch_sudoku_1()
+    if args.file:
+        if args.file.endswith('.epo'):
+            with open(args.file, encoding='utf8') as f:
+                b = Board.from_epoch_doku(f.readlines())
+        else:
+            print('Unknown extension: "%s"' % args.file)
+            return
     elif args.board == 1:
         b = easy_sudoku_1()
     elif args.board == 2:
@@ -286,6 +289,7 @@ def main(args):
 def _main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--board', type=int)
+    parser.add_argument('--file', '-f')
     parser.add_argument('--no-filter', action='store_true')
     args = parser.parse_args()
     main(args)
