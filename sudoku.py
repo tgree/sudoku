@@ -67,6 +67,7 @@ class Board:
     def __init__(self, array):
         H = len(array)
         W = len(array[0])
+        assert H == W
 
         self.slots         = np.array(array, dtype=np.int32)
         self.init_slots    = np.copy(self.slots)
@@ -83,10 +84,15 @@ class Board:
                     self.column_bitmap[c] |= (1 << v)
 
     def __repr__(self):
-        return repr(self.slots)
+        D     = len(self.slots)
+        lines = []
+        for r in range(D):
+            l = ['%u' % self.slots[r, c] for c in range(D)]
+            lines.append(' '.join(l))
+        return '\n'.join(lines)
 
     @staticmethod
-    def from_sudoku(array):
+    def from_sudoku_array(array):
         b = Board(array)
         for y in range(3):
             for x in range(3):
@@ -101,13 +107,24 @@ class Board:
         return b
 
     @staticmethod
-    def from_epoch_doku(lines):
-        lines = [l.strip() for l in lines]
-        for l in lines:
-            l.replace(' ','')
+    def from_sudoku_file(lines):
+        lines = [l.strip().replace(' ','') for l in lines if l.strip()]
 
         D = len(lines[0])
-        assert lines[D] == ''
+        assert len(lines) == D
+        array = np.zeros((D, D))
+        for r, l in enumerate(lines):
+            for c, k in enumerate(l):
+                array[r, c] = int(k)
+
+        return Board.from_sudoku_array(array)
+
+    @staticmethod
+    def from_epoch_doku_file(lines):
+        lines = [l.strip().replace(' ','') for l in lines if l.strip()]
+
+        D = len(lines[0])
+        assert lines[D] == '-'
         array = np.zeros((D, D))
         idict = {}
         for r, l in enumerate(lines[:D]):
@@ -214,7 +231,8 @@ class Board:
         for p in c.perms:
             self.iter += 1
             if self.add_perm(p, c.indices):
-                print(self)
+                # print('----------')
+                # print(self)
                 if self._solve(ci + 1):
                     return True
                 self.del_perm(c.indices)
@@ -229,53 +247,17 @@ class Board:
         return self._solve(0)
 
 
-def easy_sudoku_1():
-    b = Board.from_sudoku([[8, 0, 6,   0, 2, 7,   0, 0, 0],
-                           [0, 9, 3,   0, 6, 0,   2, 0, 0],
-                           [1, 4, 2,   0, 0, 0,   0, 8, 7],
-
-                           [0, 0, 1,   6, 0, 9,   0, 0, 0],
-                           [6, 8, 0,   0, 0, 2,   0, 1, 0],
-                           [0, 2, 0,   0, 0, 1,   3, 4, 0],
-
-                           [0, 0, 0,   0, 7, 3,   0, 0, 0],
-                           [4, 3, 0,   2, 9, 0,   5, 0, 0],
-                           [0, 6, 0,   0, 0, 0,   0, 0, 2],
-                           ])
-    return b
-
-
-def hard_sudoku_1():
-    b = Board.from_sudoku([[0, 0, 9,   0, 0, 0,   7, 0, 3],
-                           [0, 3, 0,   0, 8, 0,   0, 0, 0],
-                           [5, 0, 4,   0, 0, 0,   9, 0, 0],
-
-                           [0, 6, 0,   0, 0, 0,   0, 0, 0],
-                           [1, 0, 0,   2, 3, 0,   0, 0, 0],
-                           [7, 0, 0,   0, 0, 9,   0, 1, 0],
-
-                           [0, 0, 0,   0, 0, 4,   2, 3, 6],
-                           [0, 0, 1,   0, 0, 5,   4, 9, 0],
-                           [0, 0, 7,   0, 0, 0,   0, 0, 0],
-                           ])
-    return b
-
-
 def main(args):
     print('Building...')
-    if args.file:
-        if args.file.endswith('.epo'):
-            with open(args.file, encoding='utf8') as f:
-                b = Board.from_epoch_doku(f.readlines())
-        else:
-            print('Unknown extension: "%s"' % args.file)
-            return
-    elif args.board == 1:
-        b = easy_sudoku_1()
-    elif args.board == 2:
-        b = hard_sudoku_1()
+
+    if args.file.endswith('.epo'):
+        with open(args.file, encoding='utf8') as f:
+            b = Board.from_epoch_doku_file(f.readlines())
+    elif args.file.endswith('.sud'):
+        with open(args.file, encoding='utf8') as f:
+            b = Board.from_sudoku_file(f.readlines())
     else:
-        print('Unknown board %s.' % args.board)
+        print('Unknown extension: "%s"' % args.file)
         return
 
     if b.solve(no_filter=args.no_filter):
@@ -288,7 +270,6 @@ def main(args):
 
 def _main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--board', type=int)
     parser.add_argument('--file', '-f')
     parser.add_argument('--no-filter', action='store_true')
     args = parser.parse_args()
